@@ -170,6 +170,7 @@ Details:
 
     def _get_dataframe_by_pk(self, df: DataFrame, pks: List, full_row=False) -> DataFrame:
         """
+        INTERNAL
         :param df: Dataframe to select by primary key column
         :param pks: List of primary key values
         :param full_row: True if you want to see all columns from specified dataframe. Defaults to just problem columns.

@@ -10,9 +10,12 @@ Will need to specify or create a primary key column for matching before and afte
 Converting StringType columns to TimestampType can cause null values in poorly formed data. It's not possible
 to check by hand. This works as an early warning system.
 
+
 Example:
 
-    $ dfcv = DataframeConversionValidator(_before_df=unmodified_df, _after_df=converted_df, _primary_key_column='pk')
+    from DFCV import DataframeConversionValidator
+
+    dfcv = DataframeConversionValidator(_before_df=unmodified_df, _after_df=converted_df, _primary_key_column='pk')
 
     ---------------
     Original Shape:
