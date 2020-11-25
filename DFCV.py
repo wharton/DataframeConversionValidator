@@ -35,10 +35,40 @@ ColumnDifference = namedtuple('ColumnDifference', ['column_name', 'difference'])
 
 
 def count_nulls(df: DataFrame) -> DataFrame:
+    """
+    Count null values in columns
+
+    :param df: Dataframe to count
+    :return: Dataframe of same schema with one row, each column has the count of nulls in all rows.
+    """
     return df.select([F.count(F.when(F.col(c).isNull(), c)).alias(c) for c in df.columns])
 
 
 class DataframeConversionValidator:
+    """Class for comparing transformed dataframes to their original form.
+
+    A class for comparing two dataframes. One before a transformation takes place and one after. This provides helper
+    methods for finding problems when transforming Spark dataframes. Makes it quicker to discover poorly formed data,
+    specification errors and datetime mismatches.
+
+    Attributes:
+        before_df : Dataframe
+            Dataframe before conversion.
+        after_df : Dataframe
+            Dataframe after conversion.
+        nulls_before_df : Dict[str, int]
+            Dictionary of column names and sum of nulls in each column for `before_df`.
+        nulls_after_df : Dict[str, int]
+            Dictionary of column names and sum of nulls in each column for `after_df`.
+        differing_columns : List[ColumnDifference]
+            List of Tuple[column_name, difference]. Difference is the subtraction of `after_df` by 'before_df`.
+        column_names : List[str]
+            List of only column names from `differing_columns`.
+        primary_key_column : str
+            Column name for existing primary key column. TODO: allow multiple columns
+        bad_row_column_comparison : Dataframe bad row counts for each dataframe joined on primary key column.
+
+    """
     before_df: DataFrame
     after_df: DataFrame
     nulls_before_df: Dict[str, int]
@@ -53,8 +83,9 @@ class DataframeConversionValidator:
         :param _before_df: Dataframe before conversion, includes a PK column for matching
         :param _after_df: Dataframe after conversion, includes a PK column for matching
         :param _primary_key_column: Columnn name used to compare matching rows between dataframes
+        :param quiet: True suppresses the summary information on creation.
 
-        To add a PK column do this::
+        To add a PK column before conversion do this::
 
             df = df.withColumn('pk', F.monotonically_increasing_id())
 
@@ -88,6 +119,11 @@ class DataframeConversionValidator:
             self.summary()
 
     def summary(self) -> None:
+        """
+        Prints a summary of original dataframe shape, problem shape, problem columns and the difference in null counts per.
+        :return: None
+        TODO: allow redirection.
+        """
         column_summary = repr([f"""{column} ({difference})""" for column, difference in self.differing_columns])
         print(f"""---------------
 Original Shape:
@@ -101,27 +137,54 @@ Details:
 ---------------""")
 
     def different_row_columns(self) -> List[str]:
+        """
+        :return: List of column names where null counts do not match between dataframes.
+        """
         return list(map(lambda x: x.column_name, self.differing_columns))
 
     def bad_row_count(self) -> int:
+        """
+        :return: Count of rows where null counts do not match between dataframes.
+        """
         return self.bad_row_column_comparison.count()
 
     def bad_column_count(self) -> int:
+        """
+        :return: Count of columns where null counts do not match between dataframes.
+        """
         return len(self.different_row_columns())
 
     def original_problem_rows(self, full_row=False) -> DataFrame:
+        """
+        :param full_row: True if you want to see all the original columns. Defaults to just problem columns.
+        :return: Dataframe of rows from original dataframe where counts do not match between dataframes.
+        """
         return self._get_dataframe_by_pk(df=self.before_df, pks=self._get_pks_of_bad_rows(), full_row=full_row)
 
     def converted_problem_rows(self, full_row=False) -> DataFrame:
+        """
+        :param full_row: True if you want to see all the after columns. Defaults to just problem columns.
+        :return: Dataframe of rows from after dataframe where counts do not match between dataframes.
+        """
         return self._get_dataframe_by_pk(df=self.after_df, pks=self._get_pks_of_bad_rows(), full_row=full_row)
 
     def _get_dataframe_by_pk(self, df: DataFrame, pks: List, full_row=False) -> DataFrame:
+        """
+        :param df: Dataframe to select by primary key column
+        :param pks: List of primary key values
+        :param full_row: True if you want to see all columns from specified dataframe. Defaults to just problem columns.
+        :return: Dataframe of rows matching primary key values.
+        """
         if full_row:
             return df.where(F.col(self.primary_key_column).isin(pks))
         else:
             return df.where(F.col(self.primary_key_column).isin(pks)).select([self.primary_key_column] + self.different_row_columns())
 
     def _get_pks_of_bad_rows(self) -> List:
+        """
+        INTERNAL
+        :return: List of primary key values for problem rows.
+        """
         return [row[self.primary_key_column] for row in self.bad_row_column_comparison.select(self.primary_key_column).collect()]
 
 
